@@ -17,6 +17,8 @@ library(tidyverse)
 library(stringr)
 library(readr)
 library(tigris)
+library(tidymodels)
+library(yardstick)
 
 ```
 
@@ -44,7 +46,7 @@ air_quality$County<-str_replace(air_quality$County,"Saint","St.")
 air_quality$state_county<-paste(air_quality$state_code,air_quality$County,sep=",")
 #air_quality$state_county<-trimws(air_quality$state_county)
 
-#drought data
+#drought data 2017
 drought<-read_csv("drought_means.csv")
 drought<-drought[-c(1)]
 county_names<-str_remove(drought$County,"County")
@@ -55,6 +57,26 @@ drought$County<-str_replace(drought$County,"Saint","St.")
 #adding state + county
 drought$state_county<-paste(drought$State,drought$County,sep=",")
 drought$state_county<-trimws(drought$state_county)
+
+#drought data 2016
+drought_2016 <- read.csv("dm_export_20160101_20161231.csv")
+
+drought_2016_average <- drought_2016 %>%
+  group_by(State, County) %>%
+  summarise(mean(DSCI)) %>%
+  rename(meanDSCI2016 = "mean(DSCI)")
+
+county_names<-str_remove(drought_2016_average$County,"County")
+drought_2016_average$County <-str_remove(drought_2016_average$County, "County")
+county_names<-str_remove(drought_2016_average$County,"Parish")
+drought_2016_average$County <-str_remove(drought_2016_average$County, "Parish")
+county_names<-str_remove(drought_2016_average$County,"Borough")
+drought_2016_average$County <-str_remove(drought_2016_average$County, "Borough")
+county_names<-str_remove(drought_2016_average$County,"Census Area")
+drought_2016_average$County <-str_remove(drought_2016_average$County, "Census Area")
+#adding state + county
+drought_2016_average$state_county<-paste(drought_2016_average$State,drought_2016_average$County,sep=",")
+drought_2016_average$state_county<-trimws(drought_2016_average$state_county)
 
 ```
 
@@ -75,12 +97,15 @@ air_and_corn<-na.omit(air_and_corn)
 
 #Joining drought data with air and corn
 air_corn_drought<-left_join(air_and_corn,drought,by="state_county") 
+air_corn_drought <- left_join(air_corn_drought,drought_2016_average,by="state_county")
 
 #Cleaning up results of join
 air_corn_drought <- air_corn_drought %>%
   select(-c("County.y.y", "State.y.y", "state_code.y","County.y","State.y","state_code.x"))%>%
   rename(state=State.x)%>%
-  rename(county=County.x)
+  rename(county=County.x)%>%
+  filter(!is.na(meanDSCI2016)) %>%
+  mutate(log_quantityharvested = log(Quantity_Harvested, base = 10))
 
 ```
 
@@ -162,7 +187,121 @@ air_corn_drought_gps %>%
                     labels = c("No Drought", "Moderate Drought (D1)", "Severe Drought (D2)"))+
   theme_minimal() +
   labs(title = "What is the frequency of drought within our sample?",
-       subtitle = "Plot shows the average score of drought severity for counties within each state for the year 2017. Drought categories are derived from Drought Severity\n and Coverage Index by the University of Nebraska Lincoln.") +
+       subtitle = "Plot shows the average score of drought severity for counties within each state of our sample for the year 2017. Drought categories are derived from Drought Severity\n and Coverage Index by the University of Nebraska Lincoln.",
+       y = "Mean Drought Severity and Coverage Index",
+       x = NULL) +
   theme(plot.title = element_text(face="bold")) 
 
 ```
+
+
+### Modeling
+```{r}
+set.seed(835555635)
+
+split <- initial_split(air_corn_drought, prop = .75, strata = "log_quantityharvested")
+corn_train <- training(split)
+corn_test <- testing(split)
+
+corn_recipe <- recipe(log_quantityharvested ~., data = corn_train)%>%
+  step_rm(all_nominal_predictors())%>%
+  step_rm("Year")%>%
+  step_rm("Quantity_Harvested")%>%
+  #step_log(all_outcomes(), base = 10) %>%
+  step_normalize(all_numeric_predictors())%>%
+  prep()
+
+corn_baked <- bake(corn_recipe, new_data = corn_train)
+
+set.seed(923809584)
+
+folds <- vfold_cv(corn_train, v=10)
+
+forest_model <- rand_forest()%>%
+  set_engine("ranger", importance = "impurity")%>%
+  set_mode("regression")
+
+lasso_grid <- grid_regular(penalty(), levels = 10)
+
+lasso_model <- linear_reg(penalty = tune(), mixture = 1)%>%
+  set_engine("glmnet")%>%
+  set_mode("regression")
+
+corn_forest_wkflw <- workflow()%>%
+  add_recipe(corn_recipe)%>%
+  add_model(forest_model)
+
+corn_lasso_wkflw <- workflow()%>%
+  add_recipe(corn_recipe)%>%
+  add_model(lasso_model)
+
+corn_forest_fit <- corn_forest_wkflw %>%
+  fit_resamples(
+    resamples=folds)
+
+corn_lasso_fit <- corn_lasso_wkflw %>%
+  tune_grid(resamples = folds, 
+            grid = lasso_grid)
+
+lasso_metrics <- collect_metrics(corn_lasso_fit, summarize = FALSE) %>%
+  filter(.metric == "rmse")%>%
+  group_by(id) %>%
+  summarize(rmse = mean(.estimate))
+
+forest_metrics <- collect_metrics(corn_forest_fit, summarize = FALSE)%>%
+  filter(.metric == "rmse")%>%
+  rename(rmse = .estimate)
+
+combined_metrics <- bind_rows(
+  `lasso` = lasso_metrics, 
+  `rforest` = forest_metrics, 
+  .id = "models") %>%
+  select(-c(".metric", ".estimator", ".config"))
+
+combined_metrics%>%
+ ggplot(aes(x=id, y = rmse, group = models, color = models)) +
+  geom_point()+
+  geom_line()+
+  theme_minimal()+
+  #scale_y_continuous(limits = c(0, 2))+
+  labs(title = "RMSE for different estimated models",
+       x=NULL)
+
+final_model <- corn_forest_fit %>%
+  select_best(metric = "rmse")
+
+final_workflow <- finalize_workflow(corn_forest_wkflw,
+                                    parameters=final_model)
+
+corn_final_fit<-final_workflow%>%
+           fit(data=corn_train)
+
+#Predicting on testing data
+corn_predictions_testing<-bind_cols(corn_test,
+                      predict(object=corn_final_fit,
+                              new_data=corn_test))
+  
+  
+metrics(corn_predictions_testing, truth = log_quantityharvested, estimate = .pred)
+
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
