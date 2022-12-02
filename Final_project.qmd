@@ -1,0 +1,168 @@
+---
+title: "Final Project"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+execute: 
+  warning: false
+self-contained: true
+---
+
+###Loading in packages
+
+```{r}
+#Packages
+library(tidyverse)
+library(stringr)
+library(readr)
+library(tigris)
+
+```
+
+###Reading in data
+
+```{r}
+#fips codes data
+data("fips_codes")
+
+#yield data
+corn_yield<-read_csv("corn_yield.csv")
+corn_yield$state_code<-corn_yield$State 
+corn_yield$County<-str_replace(corn_yield$County,"St ","St.") 
+corn_yield$state_county<-paste(corn_yield$state_code,corn_yield$County,sep=",")
+corn_harvested<-corn_yield[-c(3,4)]
+
+#air quality data
+air_quality<-read_csv("corn_counties_aq.csv")
+air_quality<-air_quality%>%
+             mutate(state_code=State) 
+x<-air_quality$state_code
+state_abbreviations<-state.abb[match(x,state.name)]
+air_quality$state_code<-c(state_abbreviations)
+air_quality$County<-str_replace(air_quality$County,"Saint","St.") 
+air_quality$state_county<-paste(air_quality$state_code,air_quality$County,sep=",")
+#air_quality$state_county<-trimws(air_quality$state_county)
+
+#drought data
+drought<-read_csv("drought_means.csv")
+drought<-drought[-c(1)]
+county_names<-str_remove(drought$County,"County")
+drought$County <-str_remove(drought$County, "County")
+county_names<-str_remove(drought$County,"Parish")
+drought$County<-c(county_names)
+drought$County<-str_replace(drought$County,"Saint","St.")
+#adding state + county
+drought$state_county<-paste(drought$State,drought$County,sep=",")
+drought$state_county<-trimws(drought$state_county)
+
+```
+
+###Joining model data together
+
+```{r}
+#Joinig data 
+
+air_and_corn<-left_join(air_quality,corn_harvested,by="state_county")
+air_and_corn<-air_and_corn%>%
+              rename("State"="State.x",
+                     "County"="County.x",
+                     "Quantity_Harvested"="Quantity Harvested")%>%
+             relocate(state_county,.after=County)%>%
+             relocate(Quantity_Harvested,.after=state_county)
+#Some had corn data for fields harvested, but did not have an associated quantity
+air_and_corn<-na.omit(air_and_corn)
+
+#Joining drought data with air and corn
+air_corn_drought<-left_join(air_and_corn,drought,by="state_county") 
+
+#Cleaning up results of join
+air_corn_drought <- air_corn_drought %>%
+  select(-c("County.y.y", "State.y.y", "state_code.y","County.y","State.y","state_code.x"))%>%
+  rename(state=State.x)%>%
+  rename(county=County.x)
+
+```
+
+### Joining geographic data
+
+```{r}
+#FIPS Code
+FIPS_CODES<-data("fips_codes")
+fips_codes$state_county<-paste(fips_codes$state,fips_codes$county,sep=",")
+fips_codes$code<-paste(fips_codes$state_code,fips_codes$county_code)
+fips_codes$state_county<-str_remove(fips_codes$state_county,"County")
+fips_codes$state_county<-trimws(fips_codes$state_county)
+
+#County geographies
+counties<-counties()
+counties$code<-paste(counties$STATEFP,counties$COUNTYFP)
+
+#Joining
+air_corn_drought_gps<-left_join(air_corn_drought,fips_codes,by="state_county") #merging in fips codes
+air_corn_drought_gps<-left_join(air_corn_drought_gps,counties,by="code") #merging in geometries
+
+#Cleaning up results of join
+air_corn_drought_gps <- air_corn_drought_gps %>%
+  select(-c("NAMELSAD", "NAME", "county.y", "COUNTYFP", "STATEFP", "state_name", "state.y"))%>%
+  rename(state = state.x)%>%
+  rename(county = county.x)%>%
+  relocate(c("state", "county", "state_county", "state_code", "county_code", "code"))
+
+#adding drought categories
+air_corn_drought_gps <- air_corn_drought_gps %>%
+  mutate(drought_category = case_when(
+          meanDSCI <= 99 ~ "None",
+          meanDSCI >=100 & meanDSCI <= 199 ~ "D0",
+         meanDSCI >=200 & meanDSCI <= 299 ~ "D1",
+         meanDSCI >=300 & meanDSCI <= 399 ~ "D2",
+         meanDSCI >=400 & meanDSCI <= 499 ~ "D3",
+         meanDSCI == 500 ~ "D4"))
+
+```
+
+### Exploratory Data Visualizations
+
+```{r}
+#top 10 corn producing states 
+corn_plot <- air_corn_drought_gps %>%
+  group_by(state) %>%
+  summarize(corn_total = sum(Quantity_Harvested))%>%
+   arrange(desc(corn_total)) %>%
+  slice(1:10)
+ 
+my_factor_levels <- c("Iowa", "Illinois", "Indiana", "Minnesota", "Ohio","Wisconsin","Michigan","Nebraska","South Dakota","Pennsylvania")
+
+corn_plot$state <- factor(corn_plot$state, levels = my_factor_levels)
+
+corn_plot%>%
+  ggplot() +
+  geom_col(mapping = aes(x = state, y = corn_total), fill = "#6A8C69", width = .7) +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::number_format(accuracy = 1000000))+
+  labs(
+    title = "What are the top 10 corn producing states in our sample?",
+    subtitle = "Plot shows corn production quantities for the year 2017 in bushels for the top 10 corn producing states in our sample.",
+    y = "Bushels of Corn Produced",
+    x = NULL
+  )+
+  theme(plot.title = element_text(face="bold"))
+  
+
+#histogram of drought dispersion within states
+
+air_corn_drought_gps$drought_category <- factor(air_corn_drought_gps$drought_category, levels = c("None", "D0", "D1", "D2", "D3", "D4"))
+
+air_corn_drought_gps %>%
+  ggplot()+
+  geom_histogram(aes(x = meanDSCI, fill = drought_category), binwidth = 5) +
+  geom_vline(xintercept = 100, size = .2)+
+  facet_wrap(~state) +
+  scale_fill_manual(values = c("#5B8A07", "#FFCB00", "#D65B00"), name = "Drought Category",
+                    labels = c("No Drought", "Moderate Drought (D1)", "Severe Drought (D2)"))+
+  theme_minimal() +
+  labs(title = "What is the frequency of drought within our sample?",
+       subtitle = "Plot shows the average score of drought severity for counties within each state for the year 2017. Drought categories are derived from Drought Severity\n and Coverage Index by the University of Nebraska Lincoln.") +
+  theme(plot.title = element_text(face="bold")) 
+
+```
