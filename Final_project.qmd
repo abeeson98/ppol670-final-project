@@ -1,5 +1,6 @@
 ---
 title: "Final Project"
+author: Alexa Beeson, Mia Minkin, Hailey Wellenstein, and Zujaja Baig
 format: html
 editor: visual
 editor_options: 
@@ -19,6 +20,8 @@ library(readr)
 library(tigris)
 library(tidymodels)
 library(yardstick)
+library(ggridges)
+library(RColorBrewer)
 
 ```
 
@@ -30,6 +33,7 @@ data("fips_codes")
 
 #yield data
 corn_yield<-read_csv("corn_yield.csv")
+
 corn_yield$state_code<-corn_yield$State 
 corn_yield$County<-str_replace(corn_yield$County,"St ","St.") 
 corn_yield$state_county<-paste(corn_yield$state_code,corn_yield$County,sep=",")
@@ -37,6 +41,7 @@ corn_harvested<-corn_yield[-c(3,4)]
 
 #air quality data
 air_quality<-read_csv("corn_counties_aq.csv")
+
 air_quality<-air_quality%>%
              mutate(state_code=State) 
 x<-air_quality$state_code
@@ -44,11 +49,13 @@ state_abbreviations<-state.abb[match(x,state.name)]
 air_quality$state_code<-c(state_abbreviations)
 air_quality$County<-str_replace(air_quality$County,"Saint","St.") 
 air_quality$state_county<-paste(air_quality$state_code,air_quality$County,sep=",")
-#air_quality$state_county<-trimws(air_quality$state_county)
 
 #drought data 2017
 drought<-read_csv("drought_means.csv")
-drought<-drought[-c(1)]
+
+drought<-drought[-c(1)] %>%
+  rename(meanDSCI2017 = "meanDSCI")
+
 county_names<-str_remove(drought$County,"County")
 drought$County <-str_remove(drought$County, "County")
 county_names<-str_remove(drought$County,"Parish")
@@ -101,7 +108,7 @@ air_corn_drought <- left_join(air_corn_drought,drought_2016_average,by="state_co
 
 #Cleaning up results of join
 air_corn_drought <- air_corn_drought %>%
-  select(-c("County.y.y", "State.y.y", "state_code.y","County.y","State.y","state_code.x"))%>%
+  select(-c("County.y.y", "State.y.y", "state_code.y","County.y","State.y","state_code.x", "State", "County"))%>%
   rename(state=State.x)%>%
   rename(county=County.x)%>%
   filter(!is.na(meanDSCI2016)) %>%
@@ -136,13 +143,20 @@ air_corn_drought_gps <- air_corn_drought_gps %>%
 
 #adding drought categories
 air_corn_drought_gps <- air_corn_drought_gps %>%
-  mutate(drought_category = case_when(
-          meanDSCI <= 99 ~ "None",
-          meanDSCI >=100 & meanDSCI <= 199 ~ "D0",
-         meanDSCI >=200 & meanDSCI <= 299 ~ "D1",
-         meanDSCI >=300 & meanDSCI <= 399 ~ "D2",
-         meanDSCI >=400 & meanDSCI <= 499 ~ "D3",
-         meanDSCI == 500 ~ "D4"))
+  mutate(drought_category2017 = case_when(
+          meanDSCI2017 <= 99 ~ "None",
+          meanDSCI2017 >=100 & meanDSCI2017 <= 199 ~ "D0",
+         meanDSCI2017 >=200 & meanDSCI2017 <= 299 ~ "D1",
+         meanDSCI2017 >=300 & meanDSCI2017 <= 399 ~ "D2",
+         meanDSCI2017 >=400 & meanDSCI2017 <= 499 ~ "D3",
+         meanDSCI2017 == 500 ~ "D4")) %>%
+    mutate(drought_category2016 = case_when(
+          meanDSCI2016 <= 99 ~ "None",
+          meanDSCI2016 >=100 & meanDSCI2016 <= 199 ~ "D0",
+         meanDSCI2016 >=200 & meanDSCI2016 <= 299 ~ "D1",
+         meanDSCI2016 >=300 & meanDSCI2016 <= 399 ~ "D2",
+         meanDSCI2016 >=400 & meanDSCI2016 <= 499 ~ "D3",
+         meanDSCI2016 == 500 ~ "D4"))
 
 ```
 
@@ -162,67 +176,120 @@ corn_plot$state <- factor(corn_plot$state, levels = my_factor_levels)
 
 corn_plot%>%
   ggplot() +
-  geom_col(mapping = aes(x = state, y = corn_total), fill = "#6A8C69", width = .7) +
+  geom_segment(mapping = aes(x=fct_rev(state), xend=state, y=0, yend=corn_total), color="grey", linewidth = 1, alpha = .6)+
+  geom_point(mapping = aes(x = fct_rev(state), y = corn_total), color="#919151", size=4) +
+  coord_flip()+
   theme_minimal() +
   scale_y_continuous(labels = scales::number_format(accuracy = 1000000))+
   labs(
     title = "What are the top 10 corn producing states in our sample?",
     subtitle = "Plot shows corn production quantities for the year 2017 in bushels for the top 10 corn producing states in our sample.",
     y = "Bushels of Corn Produced",
-    x = NULL
+    x = NULL,
+    caption = "Data Source: United States Department of Agriculture, 2017"
   )+
   theme(plot.title = element_text(face="bold"))
   
 
-#histogram of drought dispersion within states
 
-air_corn_drought_gps$drought_category <- factor(air_corn_drought_gps$drought_category, levels = c("None", "D0", "D1", "D2", "D3", "D4"))
+
+
+
+#histogram of drought dispersion within states for 2017
+air_corn_drought_gps$drought_category2017 <- factor(air_corn_drought_gps$drought_category2017, levels = c("None", "D0", "D1", "D2", "D3", "D4"))
+
+air_corn_drought_gps$drought_category2016 <- factor(air_corn_drought_gps$drought_category2016, levels = c("None", "D0", "D1", "D2", "D3", "D4"))
 
 air_corn_drought_gps %>%
   ggplot()+
-  geom_histogram(aes(x = meanDSCI, fill = drought_category), binwidth = 5) +
-  geom_vline(xintercept = 100, size = .2)+
-  facet_wrap(~state) +
+  geom_histogram(aes(x = meanDSCI2017, fill = drought_category2017), binwidth = 5, color = "white", alpha = .7) +
+  geom_vline(xintercept = 100, linewidth = .2)+
+  annotate("text", x = 135, y = 50, label = "Drought threshold", size = 3)+
   scale_fill_manual(values = c("#5B8A07", "#FFCB00", "#D65B00"), name = "Drought Category",
                     labels = c("No Drought", "Moderate Drought (D1)", "Severe Drought (D2)"))+
   theme_minimal() +
   labs(title = "What is the frequency of drought within our sample?",
-       subtitle = "Plot shows the average score of drought severity for counties within each state of our sample for the year 2017. Drought categories are derived from Drought Severity\n and Coverage Index by the University of Nebraska Lincoln.",
+       subtitle = "Plot shows the average score of drought severity for counties within each state of our sample for the year 2017. Drought categories are derived from Drought Severity\n and Coverage Index (DSCI) by the University of Nebraska Lincoln. All counties to the right of the vertical reference line expereinced drought, on average, over the course of the year.",
        y = "Mean Drought Severity and Coverage Index",
-       x = NULL) +
+       x = NULL, 
+       caption = "Data Source: University of Nebraska-Lincoln, 2017") +
   theme(plot.title = element_text(face="bold")) 
+
+
+
+
+
+
+#air quality plot
+aq_plot <- air_corn_drought %>%
+  mutate(Good_days_proportion = `Good Days`/`Days with AQI`)%>%
+  mutate(Moderate_days_proportion = `Moderate Days`/`Days with AQI`)%>%
+  mutate(Unhealthyforsenstv_days_prop = `Unhealthy for Sensitive Groups Days`/`Days with AQI`)%>%
+  mutate(Unhealthy_days_proportion = `Unhealthy Days`/`Days with AQI`)%>%
+  mutate(VUnhealthy_days_proportion = `Very Unhealthy Days`/`Days with AQI`)%>%
+  mutate(Hazardous_days_proportion = `Hazardous Days`/`Days with AQI`)%>%
+  pivot_longer(
+              cols = c("Good_days_proportion", "Moderate_days_proportion", "Unhealthyforsenstv_days_prop", "Unhealthy_days_proportion", "VUnhealthy_days_proportion", "Hazardous_days_proportion"),
+               names_to = "aq_indicator",
+               values_to  = "aq_days")
+
+my_aq_factor_levels= c("Good_days_proportion", "Moderate_days_proportion", "Unhealthyforsenstv_days_prop", "Unhealthy_days_proportion", "VUnhealthy_days_proportion", "Hazardous_days_proportion")
+
+my_aq_factor_labels <- c("Good", "Moderate", "Unhealthy for Sensitive People", "Unhealthy", 
+                         "Very Unhealthy", "Hazardous")
+
+aq_plot$aq_indicator<-factor(aq_plot$aq_indicator, levels = my_aq_factor_levels, labels = my_aq_factor_labels)
+
+aq_plot %>%
+  ggplot(aes(x = aq_days, y = fct_rev(aq_indicator), group = aq_indicator, fill = aq_indicator))+
+  geom_density_ridges(alpha = .6, show.legend = FALSE, color = NA) +
+  facet_wrap(~state)+
+  theme_minimal()+
+  scale_fill_brewer(palette = "BrBG", direction=-1)+
+  scale_x_continuous(limits = c(-1.5, 1.5))+
+  labs(title = "Most states in our sample expereince, on average, Good or Moderate air quality.",
+       subtitle = "Air quality categories are set by the Environemntal Protection Agency (EPA). Values shown are the proportion of days measured which fall into each category for the year 2017.",
+    y = "Air Quality Categories",
+       x = "Proportion of Measured Days", 
+    caption = "Data Source: Environmental Protection Agency, 2017")+
+    theme(plot.title = element_text(face="bold")) 
+
 
 ```
 
-
 ### Modeling
+
 ```{r}
 set.seed(835555635)
 
+#splitting the data
 split <- initial_split(air_corn_drought, prop = .75, strata = "log_quantityharvested")
 corn_train <- training(split)
 corn_test <- testing(split)
 
+#creating the recipe
 corn_recipe <- recipe(log_quantityharvested ~., data = corn_train)%>%
   step_rm(all_nominal_predictors())%>%
   step_rm("Year")%>%
   step_rm("Quantity_Harvested")%>%
-  #step_log(all_outcomes(), base = 10) %>%
   step_normalize(all_numeric_predictors())%>%
   prep()
 
+#baking the recipe
 corn_baked <- bake(corn_recipe, new_data = corn_train)
 
+#setting up v-fold cross validation
 set.seed(923809584)
-
 folds <- vfold_cv(corn_train, v=10)
 
+#creating models
+#random forest
 forest_model <- rand_forest()%>%
   set_engine("ranger", importance = "impurity")%>%
   set_mode("regression")
 
+#lasso
 lasso_grid <- grid_regular(penalty(), levels = 10)
-
 lasso_model <- linear_reg(penalty = tune(), mixture = 1)%>%
   set_engine("glmnet")%>%
   set_mode("regression")
@@ -235,20 +302,21 @@ corn_lasso_wkflw <- workflow()%>%
   add_recipe(corn_recipe)%>%
   add_model(lasso_model)
 
-corn_forest_fit <- corn_forest_wkflw %>%
+corn_forest_cv <- corn_forest_wkflw %>%
   fit_resamples(
     resamples=folds)
 
-corn_lasso_fit <- corn_lasso_wkflw %>%
+corn_lasso_cv <- corn_lasso_wkflw %>%
   tune_grid(resamples = folds, 
             grid = lasso_grid)
 
-lasso_metrics <- collect_metrics(corn_lasso_fit, summarize = FALSE) %>%
+#viewing metrics from models
+lasso_metrics <- collect_metrics(corn_lasso_cv, summarize = FALSE) %>%
   filter(.metric == "rmse")%>%
   group_by(id) %>%
   summarize(rmse = mean(.estimate))
 
-forest_metrics <- collect_metrics(corn_forest_fit, summarize = FALSE)%>%
+forest_metrics <- collect_metrics(corn_forest_cv, summarize = FALSE)%>%
   filter(.metric == "rmse")%>%
   rename(rmse = .estimate)
 
@@ -263,11 +331,15 @@ combined_metrics%>%
   geom_point()+
   geom_line()+
   theme_minimal()+
-  #scale_y_continuous(limits = c(0, 2))+
-  labs(title = "RMSE for different estimated models",
-       x=NULL)
+  scale_color_manual(values = c("#00AFB5", "#BD3367"), labels = c("LASSO", "Random Forest"), name = "Model")+
+  labs(title = "Root Mean Squared Error (RMSE) for LASSO and Random Forest Models",
+       subtitle = "Plot shows RMSE for models predicting corn yield across 10 v-fold cross validation samples. \nThe random forest model generates lower RMSEs across all folds.",
+       x=NULL, 
+       y = "RMSE") +
+  theme(plot.title = element_text(face="bold"))
 
-final_model <- corn_forest_fit %>%
+#finalizing model based on lowest rmse
+final_model <- corn_forest_cv %>%
   select_best(metric = "rmse")
 
 final_workflow <- finalize_workflow(corn_forest_wkflw,
@@ -281,7 +353,6 @@ corn_predictions_testing<-bind_cols(corn_test,
                       predict(object=corn_final_fit,
                               new_data=corn_test))
   
-  
 metrics(corn_predictions_testing, truth = log_quantityharvested, estimate = .pred)
 
 
@@ -290,18 +361,3 @@ metrics(corn_predictions_testing, truth = log_quantityharvested, estimate = .pre
 
 
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
