@@ -1,5 +1,6 @@
 ---
-title: "Final Project"
+title: "Introduction to Data Science: Fall 2022 Final Project"
+subtitle: "Predicting crop yields using weather data, using supervised machine learning."
 author: Alexa Beeson, Mia Minkin, Hailey Wellenstein, and Zujaja Baig
 format: html
 editor: visual
@@ -8,9 +9,20 @@ editor_options:
 execute: 
   warning: false
 self-contained: true
+theme: cosmo
+code-fold: true
 ---
 
-###Loading in packages
+# Introduction
+
+XXXXX Introduction to project
+
+# Data
+
+XXXXX Description of data
+
+# Pre-analysis data merging and cleaning
+Loading in packages
 
 ```{r}
 #Packages
@@ -22,24 +34,31 @@ library(tidymodels)
 library(yardstick)
 library(ggridges)
 library(RColorBrewer)
-
+library(usmap)
+library(tidycensus)
+library(datasets)
+library(patchwork)
+library(vip)
 ```
 
-###Reading in data
+
+#### Reading in data
+Yield data:
 
 ```{r}
-#fips codes data
-data("fips_codes")
-
-#yield data
+#yield data: corn yield data from United States Department of Agriculture
 corn_yield<-read_csv("corn_yield.csv")
 
 corn_yield$state_code<-corn_yield$State 
 corn_yield$County<-str_replace(corn_yield$County,"St ","St.") 
 corn_yield$state_county<-paste(corn_yield$state_code,corn_yield$County,sep=",")
 corn_harvested<-corn_yield[-c(3,4)]
+```
 
-#air quality data
+Air quality data:
+
+```{r}
+#air quality data: air quality data for 2017 from Environmental Protection Agency
 air_quality<-read_csv("corn_counties_aq.csv")
 
 air_quality<-air_quality%>%
@@ -49,8 +68,12 @@ state_abbreviations<-state.abb[match(x,state.name)]
 air_quality$state_code<-c(state_abbreviations)
 air_quality$County<-str_replace(air_quality$County,"Saint","St.") 
 air_quality$state_county<-paste(air_quality$state_code,air_quality$County,sep=",")
+```
 
-#drought data 2017
+Drought data:
+
+```{r}
+#drought data 2017: From University of Nebraska Lincoln
 drought<-read_csv("drought_means.csv")
 
 drought<-drought[-c(1)] %>%
@@ -65,7 +88,7 @@ drought$County<-str_replace(drought$County,"Saint","St.")
 drought$state_county<-paste(drought$State,drought$County,sep=",")
 drought$state_county<-trimws(drought$state_county)
 
-#drought data 2016
+#drought data 2016: From University of Nebraska Lincoln
 drought_2016 <- read.csv("dm_export_20160101_20161231.csv")
 
 drought_2016_average <- drought_2016 %>%
@@ -81,16 +104,18 @@ county_names<-str_remove(drought_2016_average$County,"Borough")
 drought_2016_average$County <-str_remove(drought_2016_average$County, "Borough")
 county_names<-str_remove(drought_2016_average$County,"Census Area")
 drought_2016_average$County <-str_remove(drought_2016_average$County, "Census Area")
+
 #adding state + county
 drought_2016_average$state_county<-paste(drought_2016_average$State,drought_2016_average$County,sep=",")
 drought_2016_average$state_county<-trimws(drought_2016_average$state_county)
-
 ```
 
-###Joining model data together
+#### Joining data together
+
+Joining model data
 
 ```{r}
-#Joinig data 
+#Joining model data 
 
 air_and_corn<-left_join(air_quality,corn_harvested,by="state_county")
 air_and_corn<-air_and_corn%>%
@@ -99,7 +124,7 @@ air_and_corn<-air_and_corn%>%
                      "Quantity_Harvested"="Quantity Harvested")%>%
              relocate(state_county,.after=County)%>%
              relocate(Quantity_Harvested,.after=state_county)
-#Some had corn data for fields harvested, but did not have an associated quantity
+#Some had corn data for fields harvested, but did not have an associated quantity, we omit these values
 air_and_corn<-na.omit(air_and_corn)
 
 #Joining drought data with air and corn
@@ -116,11 +141,13 @@ air_corn_drought <- air_corn_drought %>%
 
 ```
 
-### Joining geographic data
+Joining geographic data
 
 ```{r}
+#| output: false
 #FIPS Code
 FIPS_CODES<-data("fips_codes")
+
 fips_codes$state_county<-paste(fips_codes$state,fips_codes$county,sep=",")
 fips_codes$code<-paste(fips_codes$state_code,fips_codes$county_code)
 fips_codes$state_county<-str_remove(fips_codes$state_county,"County")
@@ -160,10 +187,10 @@ air_corn_drought_gps <- air_corn_drought_gps %>%
 
 ```
 
-### Exploratory Data Visualizations
+# Exploratory Data Analysis: Visualizations
 
 ```{r}
-#top 10 corn producing states 
+#top 10 corn producing states lollipop chart
 corn_plot <- air_corn_drought_gps %>%
   group_by(state) %>%
   summarize(corn_total = sum(Quantity_Harvested))%>%
@@ -174,7 +201,7 @@ my_factor_levels <- c("Iowa", "Illinois", "Indiana", "Minnesota", "Ohio","Wiscon
 
 corn_plot$state <- factor(corn_plot$state, levels = my_factor_levels)
 
-corn_plot%>%
+corn_plot <- corn_plot%>%
   ggplot() +
   geom_segment(mapping = aes(x=fct_rev(state), xend=state, y=0, yend=corn_total), color="grey", linewidth = 1, alpha = .6)+
   geom_point(mapping = aes(x = fct_rev(state), y = corn_total), color="#919151", size=4) +
@@ -183,10 +210,10 @@ corn_plot%>%
   scale_y_continuous(labels = scales::number_format(accuracy = 1000000))+
   labs(
     title = "What are the top 10 corn producing states in our sample?",
-    subtitle = "Plot shows corn production quantities for the year 2017 in bushels for the top 10 corn producing states in our sample.",
+    subtitle = "Plot shows corn production quantities for the year 2017 in bushels for the\n top 10 corn producing states in our sample.",
     y = "Bushels of Corn Produced",
     x = NULL,
-    caption = "Data Source: United States Department of Agriculture, 2017"
+    caption = "Data Source:\nUnited States Department of Agriculture, 2017 Census"
   )+
   theme(plot.title = element_text(face="bold"))
   
@@ -195,16 +222,16 @@ corn_plot%>%
 
 
 
-#histogram of drought dispersion within states for 2017
+#drought dispersion within states for 2017 histogram
 air_corn_drought_gps$drought_category2017 <- factor(air_corn_drought_gps$drought_category2017, levels = c("None", "D0", "D1", "D2", "D3", "D4"))
 
 air_corn_drought_gps$drought_category2016 <- factor(air_corn_drought_gps$drought_category2016, levels = c("None", "D0", "D1", "D2", "D3", "D4"))
 
-air_corn_drought_gps %>%
+drought_plot <- air_corn_drought_gps %>%
   ggplot()+
   geom_histogram(aes(x = meanDSCI2017, fill = drought_category2017), binwidth = 5, color = "white", alpha = .7) +
   geom_vline(xintercept = 100, linewidth = .2)+
-  annotate("text", x = 135, y = 50, label = "Drought threshold", size = 3)+
+  annotate("text", x = 140, y = 50, label = "Drought threshold", size = 3)+
   scale_fill_manual(values = c("#5B8A07", "#FFCB00", "#D65B00"), name = "Drought Category",
                     labels = c("No Drought", "Moderate Drought (D1)", "Severe Drought (D2)"))+
   theme_minimal() +
@@ -220,7 +247,7 @@ air_corn_drought_gps %>%
 
 
 
-#air quality plot
+#air quality density ridges plot
 aq_plot <- air_corn_drought %>%
   mutate(Good_days_proportion = `Good Days`/`Days with AQI`)%>%
   mutate(Moderate_days_proportion = `Moderate Days`/`Days with AQI`)%>%
@@ -240,14 +267,14 @@ my_aq_factor_labels <- c("Good", "Moderate", "Unhealthy for Sensitive People", "
 
 aq_plot$aq_indicator<-factor(aq_plot$aq_indicator, levels = my_aq_factor_levels, labels = my_aq_factor_labels)
 
-aq_plot %>%
+aqi_plot<-aq_plot %>%
   ggplot(aes(x = aq_days, y = fct_rev(aq_indicator), group = aq_indicator, fill = aq_indicator))+
   geom_density_ridges(alpha = .6, show.legend = FALSE, color = NA) +
   facet_wrap(~state)+
   theme_minimal()+
   scale_fill_brewer(palette = "BrBG", direction=-1)+
   scale_x_continuous(limits = c(-1.5, 1.5))+
-  labs(title = "Most states in our sample expereince, on average, Good or Moderate air quality.",
+  labs(title = "Most states in our sample experience, on average, Good or Moderate air quality.",
        subtitle = "Air quality categories are set by the Environemntal Protection Agency (EPA). Values shown are the proportion of days measured which fall into each category for the year 2017.",
     y = "Air Quality Categories",
        x = "Proportion of Measured Days", 
@@ -255,9 +282,121 @@ aq_plot %>%
     theme(plot.title = element_text(face="bold")) 
 
 
+
+
+#corn yield map
+#State corn data
+state_harvest<-air_corn_drought%>%
+  group_by(state)%>%
+  summarise_at(vars(Quantity_Harvested),
+               list(harvest_total=sum))
+state_abb<-as_tibble(state.abb)%>%
+  rename(state=value)
+state_harvest<-left_join(state_harvest, state_abb,by="state")
+
+state_corn_map<-
+  plot_usmap(regions = "states",
+             data = state_harvest,
+             values = "harvest_total",
+             color = "black",
+             size=0.001)+
+  scale_fill_gradient2(low="#F7E594",
+                       mid="#F7E594",
+                       high="red",
+                       na.value="white",
+                       name = "Bushels of corn",
+                       label = scales::comma)+
+  labs(title="State Corn Harvest  in the United States (2017)", 
+       caption = "Data Source: United States Department of Agriculture, 2017 Census")+
+  theme(legend.position = "right",
+        panel.background=element_rect(colour = "black", fill = "white"), 
+        plot.title = element_text(face="bold"))
+
+
+
+
+#drought map
+drought_2017<-drought%>%
+  group_by(State)%>%
+  summarise_at(vars(meanDSCI2017),
+               list(average_DSCI=mean))%>%
+  rename(state = State)
+drought_2017<-left_join(drought_2017, state_abb, by = "state")
+
+state_drought_map<-
+  plot_usmap(regions = "states",
+             data = drought_2017,
+             values = "average_DSCI",
+             color = "black",
+             size=0.001)+
+  scale_fill_gradient2(low="white",
+                       high="dark red",
+                       na.value="grey",
+                       name = "Drought Index\nAnnual Average",
+                       label = scales::comma)+
+  labs(title="State Drought Index Averages in the United States (2017)",
+       caption = "Data Source: University of Nebraska-Lincoln, 2017,")+
+  theme(legend.position = "right",
+        panel.background=element_rect(colour = "black", fill = "white"), 
+        plot.title = element_text(face="bold"))
+
+
+
+
+#air quality map 
+state_aq<-air_quality%>%
+  group_by(State)%>%
+  summarise_at(vars(`Unhealthy Days`),
+               list(average_aq=mean))%>%
+  rename(state_name=State)
+state_fips_aq <- fips_codes %>%
+  select(c("state_name","state"))
+  
+state_aq <- left_join(state_aq,state_fips_aq,by="state_name")
+
+state_aq_map<-
+  plot_usmap(regions = "states",
+             data = state_aq,
+             values = "average_aq",
+             color = "black",
+             size=0.001)+
+  scale_fill_gradient2(low="#F7E594",
+                       mid="#F7E594",
+                       high="red",
+                       na.value="white",
+                       name = "State AQ Averages",
+                       label = scales::comma)+
+  labs(title="States with Unhealthy AQ in the United States (2017)", 
+       caption = "Data Source: Environmental Protection Agency, 2017")+
+  theme(legend.position = "right",
+        panel.background=element_rect(colour = "black", fill = "white"), 
+        plot.title = element_text(face="bold"))
+
 ```
 
-### Modeling
+```{r}
+#| column: page
+
+state_corn_map 
+corn_plot
+```
+
+```{r}
+#| column: page
+
+state_drought_map 
+drought_plot
+
+state_aq_map 
+```
+
+```{r, fig.width = 12, fig.height= 6}
+#| column: page
+
+aqi_plot 
+```
+
+# Modeling: Predicting corn yields with weather data
 
 ```{r}
 set.seed(835555635)
@@ -325,7 +464,10 @@ combined_metrics <- bind_rows(
   `rforest` = forest_metrics, 
   .id = "models") %>%
   select(-c(".metric", ".estimator", ".config"))
+```
 
+```{r}
+#RMSE plot 
 combined_metrics%>%
  ggplot(aes(x=id, y = rmse, group = models, color = models)) +
   geom_point()+
@@ -337,7 +479,11 @@ combined_metrics%>%
        x=NULL, 
        y = "RMSE") +
   theme(plot.title = element_text(face="bold"))
+```
 
+XXXXX
+
+```{r}
 #finalizing model based on lowest rmse
 final_model <- corn_forest_cv %>%
   select_best(metric = "rmse")
@@ -354,10 +500,20 @@ corn_predictions_testing<-bind_cols(corn_test,
                               new_data=corn_test))
   
 metrics(corn_predictions_testing, truth = log_quantityharvested, estimate = .pred)
+```
 
+Variable Importance
 
-
-
-
-
+```{r}
+corn_final_fit %>%
+ extract_fit_parsnip() %>%
+ vip(num_features = 10,
+         aesthetics = list(fill = "cadetblue3", size = 2))+
+  labs(title = "Most important variables in our model",
+subtitle = "This plot shows the variables in our data based on their importance in predicting corn yield with our model.",
+y = "Importance",
+x = "Variables")+
+  scale_x_discrete(labels= c("meanDSCI2016"="Mean DSCI in 2016", "meanDSCI2017"="Mean DSCI in 2017"))+
+theme(plot.title = element_text(face="bold"))+
+  theme_minimal() 
 ```
