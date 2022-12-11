@@ -379,22 +379,24 @@ state_aq_map<-
 ```
 
 ### Corn production:
+
 ```{r, fig.width = 13, fig.height= 8}
 #| column: page
 state_corn_map + corn_plot
 ```
 
 ### Drought Severity and Coverage:
+
 ```{r, fig.width = 13, fig.height= 8}
 #| column: page
 state_drought_map + drought_plot
 ```
 
 ### Air quality:
+
 ```{r}
 state_aq_map 
 ```
-
 
 ```{r, fig.width = 12, fig.height= 8}
 #| column: page
@@ -470,6 +472,11 @@ combined_metrics <- bind_rows(
   .id = "models") %>%
   select(-c(".metric", ".estimator", ".config"))
 ```
+## Evaluating Our Model:
+
+###Root Mean Squared Error (RMSE)
+
+We used the 'collect metrics' function to collect the Root Mean Square Error(RMSE) for both the models across the 10 folds. We then combine the two metrics and plot the RMSE values. The plot shows that the Random Forest model performs better than the Lasso Regression model across all folds. This is because compared to single classification models, Random Forest reduces variance by averaging predicted probabilities across multiple trees. It uses a ransom sample from the training data for each tree and generates splits, preventing over-fitting the data. It also isolates outliers in separate leaves.
 
 ```{r}
 #RMSE plot 
@@ -486,7 +493,9 @@ combined_metrics%>%
   theme(plot.title = element_text(face="bold"))
 ```
 
-XXXXX
+### Finalizing Our Model
+
+We finalize our model by choosing the random forest model with the lowest RMSE. We then fit this finalized model on all of our training data as well as use this model to generate predictions on our testing data. This is the final step of our supervised machine learning development.
 
 ```{r}
 #finalizing model based on lowest rmse
@@ -503,11 +512,15 @@ corn_final_fit<-final_workflow%>%
 corn_predictions_testing<-bind_cols(corn_test,
                       predict(object=corn_final_fit,
                               new_data=corn_test))
-  
+```
+
+Once we run our model on our testing data, we generate metrics on how our model performed on this "new" data that it has not been tested on before. We see that our model generates an RMSE of .988. This value is not as low as we would have liked, as our maximum value for the log of quantity of corn harvested in the testing data is 7.69, with a mean of 5.9. 
+```{r}
 metrics(corn_predictions_testing, truth = log_quantityharvested, estimate = .pred)
 ```
 
-Variable Importance
+## Variable Importance
+Finally, based on our results, we visualize variable importance for the Random Forest model to see which variables in our data set play the most important role in predicting the outcome i.e. corn yield. 
 
 ```{r}
 corn_final_fit %>%
@@ -522,3 +535,5 @@ x = "Variables")+
   theme_minimal()+
 theme(plot.title = element_text(face="bold"))
 ```
+
+The plot shows that mean Drought Severity and Coverage Index for 2016 and 2017 were the most important predictors in our model which is understandable considering drought levels effect crop yields. These are followed by air quality variables that measure good Air Quality Index days, days with highest AQI and moderate air quality days. Ozone concentration days, 90th percentile AQI, median AQI are also important predictors in our model but they show a lower importance. Conceptually, it makes sense that drought levels and Air Quality Index are the most important variables in predicting corn yield, as these variables affect the crops most directly throughout their growth cycle. Other metrics that we use to predict corn yields which have lower levels of importance, like the number of days which are "Unhealthy" or "Hazardous" are relatively infrequent in our data, which also could explain their low explanatory power, as these variables have little variance for the model to exploit. Finally, worse air quality current is concentrated in more urban areas, and therefore may have a lesser effect on crop production at this point in time, although the increase of air pollution events, like forest fires or increasing urban sprawl, could increase the importance of these variables in the future. 
