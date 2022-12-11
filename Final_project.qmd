@@ -47,7 +47,6 @@ Using Alabama as an example: <https://www.nass.usda.gov/Publications/AgCensus/20
 
 Volume and Chapter allowed us to select a portion of the Census to narrow down the available tables. Level allowed us to find data on the county level- as it is available nationally, by state, and by county. Then we could change the state through calling its direct name as well as altering the FIPS code that follows "st". Finally, the final digits call up a specific table- field crop production. After downloading each state as an individual .pdf, we merged the data sets to allow the unit of observation to exist on the county level.
 
-*Reading in data*
 Yield data:
 ```{r}
 #yield data: corn yield data from United States Department of Agriculture
@@ -113,7 +112,7 @@ drought_2016_average$state_county<-trimws(drought_2016_average$state_county)
 **Merging the Data**
 Because we used data from multiple sources, one of the most time-heavy aspects of this project was ensuring we merged the data in the right manner. All of the data was already on the county level, but due to differences in naming conventions across the United States (counties are called "Parishes" in Louisiana and there are some states that use "Census Area" or "Borough" instead of county) we had to make sure to clean the names of individual data sets before merging them. First, we joined the air quality data set with the corn production data set, dropping the counties for which there was either no corn or air quality data. We then joined the drought data set, and finally we added in the geography data- including FIPS codes and latitude/longitude in order to create geo-spatial visualizations in our exploratory data analysis portion of this project.
 
-Joining Modeling Data
+Joining modeling data
 ```{r}
 #Joining model data 
 
@@ -375,8 +374,8 @@ state_aq_map<-
 ```
 
 ### Corn production:
-**Top 10 Corn States in 2017 and a Map of State Corn Production Totals**
-```{r, fig.width = 13, fig.height= 8}
+**Map of State Corn Production Totals and Top 10 Corn Producing States in 2017**
+```{r, fig.width = 13, fig.height= 5}
 #| column: page
 state_corn_map + corn_plot
 ```
@@ -384,15 +383,15 @@ These two visualizations help us better understand corn production across the Un
 Although our data is a county-level dataset, we believe that the state-based visualizations are more productive to understanding general trends in corn production as well as drought and air quality. Droughts and poor air quality measures do not themselves stop at county lines, so differentiating between counties is neither productive to our understanding of trends nor is visually clear.
 
 ### Drought Severity and Coverage:
-**Drought Dispersion in 2017 and a Map of Drought Categories**
-```{r, fig.width = 13, fig.height= 8}
+**Map of Drought Dispersion in 2017 and Distribution of Drought Categories**
+```{r, fig.width = 13, fig.height= 5}
 #| column: page
 state_drought_map + drought_plot
 ```
 As mentioned in the data section of this project, a higher drought index value is representative of more severe drought. Surprisingly, states with high corn yield actually do not have the lowest drought indeces for 2017. This could mean that there is more to crop production than precipitation levels, or lack thereof. This should be interesting in our model, as drought does not have a clear relationship with corn production, solely based on these visualizations.
 
 ### Air quality:
-**Air Quality in 2017 and a Map of Air Quality by States, Measured by Unhealthy Days**
+**Map of Air Quality by States, Measured by Unhealthy Days and Air Quality in 2017**
 ```{r}
 state_aq_map 
 ```
@@ -480,8 +479,6 @@ combined_metrics <- bind_rows(
   .id = "models") %>%
   select(-c(".metric", ".estimator", ".config"))
 ```
-
-### Evaluating Our Model:
 
 **Root Mean Squared Error (RMSE)**
 
