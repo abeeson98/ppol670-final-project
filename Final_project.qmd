@@ -12,19 +12,14 @@ self-contained: true
 theme: cosmo
 code-fold: true
 ---
+# Using Climate Data to Predict Corn Production Across the United States
 
-# Introduction
+## *Introduction*
 
-XXXXX Introduction to project
+A crop's performance in the field is a product of the environment in which it is grown. Of course, there are many factors that impact the environment in the field that are as niche as soil pH and as impactful as drought. Some factors include humidity, average precipitation, soil type, soil nutrients, days of sunshine, temperature, wind, and natural disasters. There are also technologies that impact crop production such as irrigation, fertilization, genetically modified seeds, and pesticides. These factors are quickly changing across the United States as climate change continues to impact where and how well certain crops can be successfully grown. Farmers also have to adapt to new or revised technologies to keep up with the ever-changing field environment, which is more often than not out of their control. In this project, we wanted to leverage information about these factors and technologies to predict crop production across the United States. However, it is very challenging to come across data on all these measures consistently across the United States at the same level of observation. We use limited data- just two measures of environment, air quality and drought- to create a supervised machine learning model that predicts yearly corn production in all counties with such information available. We believe that this absence of uniform and breadth of data actually makes our predictive model more "realistic" to farmers with the same kinds of limitations on data collection as we had. While there are some states that are more heavily engaged in corn production, such as Iowa and Illinois, we wanted to deepen our dataset to include all the counties we could that grow corn across the United States. By broadening our model to include counties from nearly all states, we also have more variation in our predictor variables- as droughts and air quality vary widely across the United States. More information on how we retrieved and merged this data are in sections to follow.
 
-# Data
-
-XXXXX Description of data
-
-# Pre-analysis data merging and cleaning
-
+## *Data*
 Loading in packages
-
 ```{r}
 #Packages
 library(tidyverse)
@@ -41,11 +36,19 @@ library(datasets)
 library(patchwork)
 library(vip)
 ```
+**Data Sets**
+To create a simple supervised machine learning model to predict corn production across the United States, we needed data that was available across the United States and publicly accessible. We needed to ensure there would be enough observations the sufficiently feed our model. We also needed to ensure that the environmental or climate measures we used had suitable variation and also were different enough measures that they were not repeating information. These factors combined are how we decided upon using air quality metrics and a drought index to predict corn production in bushels at the county level. Air Quality dataset came from the United States Environmental Protection Agency (EPA). Available as a [.csv file](https://aqs.epa.gov/aqsweb/airdata/download_files.html) (annual_aqi_by_county_2017), this publicly available dataset was easily downloadable from the EPA website. It contains several measures of air health- notably the Air Quality Index (AQI). The AQI is an index scaled from 0-500 that measures overall air quality, with lower values representing better air quality. It also holds data on days with common pollutants that have strong negative impacts on general air quality- days with carbon monoxide, nitrogen dioxide, or ozone detection. It also includes information on days with pollutant particles in the air, a measure called "PM".
 
-#### Reading in data
+Drought data came from the University of Nebraska- Lincoln. On the UNL website, it is possible to customize datasets from multiple selection criteria. We used the Drought Severity and Coverage Index (DSCI) data, available for public download as a [.csv file](https://droughtmonitor.unl.edu/DmData/DataDownload/DSCI.aspx). We decided to use two years of data for this measure- as we believe the prevalence of severe drought in 2016 will impact the crop growth of 2017. We downloaded two separate files for each year, selecting all available counties, and then edited the data set to create an average DSCI measure for each county each year. The DSCI is also an index measured from 0-500 with lower values representing no drought, and higher values representing extreme drought.
 
+Finally, the corn production dataset is one we created ourselves from information on the United States Department of Agriculture's (USDA) 2017 Census of Agriculture. This census collects information on all farms and the people who own and operate them. The USDA believes this sentence serves as the voice for America's farmers and ranchers. We believe using information like this is not only an interesting exercise in predictive modeling, but also helps demonstrate the impact climate change has on the land and on the livelihoods of those who work it. To retrieve the USDA Census data, we used an application programming interface (API) to select and download the tables we needed in each state. The USDA Census of Agriculture has a web-based API that allows url edits to retrieve PDF versions of corn production tables. We used this API manipulation to call tables for all the states we used in this project.
+
+Using Alabama as an example: <https://www.nass.usda.gov/Publications/AgCensus/2017/Full_Report/Volume_1,_Chapter_2_County_Level/Alabama/st01_2_0025_0025.pdf>
+
+Volume and Chapter allowed us to select a portion of the Census to narrow down the available tables. Level allowed us to find data on the county level- as it is available nationally, by state, and by county. Then we could change the state through calling its direct name as well as altering the FIPS code that follows "st". Finally, the final digits call up a specific table- field crop production. After downloading each state as an individual .pdf, we merged the data sets to allow the unit of observation to exist on the county level.
+
+*Reading in data*
 Yield data:
-
 ```{r}
 #yield data: corn yield data from United States Department of Agriculture
 corn_yield<-read_csv("corn_yield.csv")
@@ -55,9 +58,7 @@ corn_yield$County<-str_replace(corn_yield$County,"St ","St.")
 corn_yield$state_county<-paste(corn_yield$state_code,corn_yield$County,sep=",")
 corn_harvested<-corn_yield[-c(3,4)]
 ```
-
 Air quality data:
-
 ```{r}
 #air quality data: air quality data for 2017 from Environmental Protection Agency
 air_quality<-read_csv("corn_counties_aq.csv")
@@ -70,9 +71,7 @@ air_quality$state_code<-c(state_abbreviations)
 air_quality$County<-str_replace(air_quality$County,"Saint","St.") 
 air_quality$state_county<-paste(air_quality$state_code,air_quality$County,sep=",")
 ```
-
 Drought data:
-
 ```{r}
 #drought data 2017: From University of Nebraska Lincoln
 drought<-read_csv("drought_means.csv")
@@ -111,10 +110,10 @@ drought_2016_average$state_county<-paste(drought_2016_average$State,drought_2016
 drought_2016_average$state_county<-trimws(drought_2016_average$state_county)
 ```
 
-#### Joining data together
+**Merging the Data**
+Because we used data from multiple sources, one of the most time-heavy aspects of this project was ensuring we merged the data in the right manner. All of the data was already on the county level, but due to differences in naming conventions across the United States (counties are called "Parishes" in Louisiana and there are some states that use "Census Area" or "Borough" instead of county) we had to make sure to clean the names of individual data sets before merging them. First, we joined the air quality data set with the corn production data set, dropping the counties for which there was either no corn or air quality data. We then joined the drought data set, and finally we added in the geography data- including FIPS codes and latitude/longitude in order to create geo-spatial visualizations in our exploratory data analysis portion of this project.
 
-Joining model data
-
+Joining Modeling Data
 ```{r}
 #Joining model data 
 
@@ -141,9 +140,7 @@ air_corn_drought <- air_corn_drought %>%
   mutate(log_quantityharvested = log(Quantity_Harvested, base = 10))
 
 ```
-
 Joining geographic data
-
 ```{r}
 #| output: false
 #FIPS Code
@@ -188,8 +185,7 @@ air_corn_drought_gps <- air_corn_drought_gps %>%
 
 ```
 
-# Exploratory Data Analysis: Visualizations
-
+## *Pre-Modeling Visualizations*
 ```{r}
 #top 10 corn producing states lollipop chart
 corn_plot <- air_corn_drought_gps %>%
@@ -379,32 +375,44 @@ state_aq_map<-
 ```
 
 ### Corn production:
-
+**Top 10 Corn States in 2017 and a Map of State Corn Production Totals**
 ```{r, fig.width = 13, fig.height= 8}
 #| column: page
 state_corn_map + corn_plot
 ```
+These two visualizations help us better understand corn production across the United States. There are some regions that we found produce no corn, such as the small states in the Northeast and Southwest, where the climate is not friendly to such field crops. Further, there are some states such as Iowa that produce very large quantities of corn, especially relative to their land size. This tells us that there are clearly geographic regions of the United States that are best suited to corn production. Despite the much greater size of states such as California and Texas, there is clearly something about the climate and geography of states such as Iowa that serve as better land for corn crops. This is exciting for us because perhaps these differences can be estimated up with our drought and air quality data.
+Although our data is a county-level dataset, we believe that the state-based visualizations are more productive to understanding general trends in corn production as well as drought and air quality. Droughts and poor air quality measures do not themselves stop at county lines, so differentiating between counties is neither productive to our understanding of trends nor is visually clear.
 
 ### Drought Severity and Coverage:
-
+**Drought Dispersion in 2017 and a Map of Drought Categories**
 ```{r, fig.width = 13, fig.height= 8}
 #| column: page
 state_drought_map + drought_plot
 ```
+As mentioned in the data section of this project, a higher drought index value is representative of more severe drought. Surprisingly, states with high corn yield actually do not have the lowest drought indeces for 2017. This could mean that there is more to crop production than precipitation levels, or lack thereof. This should be interesting in our model, as drought does not have a clear relationship with corn production, solely based on these visualizations.
 
 ### Air quality:
-
+**Air Quality in 2017 and a Map of Air Quality by States, Measured by Unhealthy Days**
 ```{r}
 state_aq_map 
 ```
-
+As we can see through both of these visualizations, there are a few states with particularly poor air quality, especially in the West. However, eastward from the Rocky Mountains, there is very little variation in the number of days with unhealthy air quality.
 ```{r, fig.width = 12, fig.height= 8}
 #| column: page
 aqi_plot 
 ```
+However, this is just one measure of overall air quality, and perhaps we will find in our model that there are other measures of air quality, such as days with detected Ozone, that have a stronger predictive impact on corn production.
+ 
+## *Model and Variable Importance*
+**Models**
 
-# Modeling: Predicting corn yields with weather data
+We wanted to test out multiple models and hyperparameter tuning to make the most out of our limited dataset. We also knew that we wanted to use supervised machine learning techniques so we could  predict crop outputs. We decided to use a Lasso model and a Random Forest model. 
 
+The Lasso model performs variable selection and regularization to target accuracy, which is very useful for a shallow dataset like ours. It also has the capability to force the coefficient (or impact) of certain variables to zero- which drops them from the model. This was useful to us as we were not certain whether some variables were useful at all in predicting crop production, and did not want them to lead to avoidably inaccurate predictions.
+
+The Random Forest model was chosen as it was also useful for a shallow dataset. This model uses ensemble learning and regression to construct many trees and present the average prediction of these individual trees. This was also useful as we could understand variable importance with this model. 
+
+The models are as follows: 
 ```{r}
 set.seed(835555635)
 
@@ -472,9 +480,10 @@ combined_metrics <- bind_rows(
   .id = "models") %>%
   select(-c(".metric", ".estimator", ".config"))
 ```
-## Evaluating Our Model:
 
-###Root Mean Squared Error (RMSE)
+### Evaluating Our Model:
+
+**Root Mean Squared Error (RMSE)**
 
 We used the 'collect metrics' function to collect the Root Mean Square Error(RMSE) for both the models across the 10 folds. We then combine the two metrics and plot the RMSE values. The plot shows that the Random Forest model performs better than the Lasso Regression model across all folds. This is because compared to single classification models, Random Forest reduces variance by averaging predicted probabilities across multiple trees. It uses a ransom sample from the training data for each tree and generates splits, preventing over-fitting the data. It also isolates outliers in separate leaves.
 
@@ -493,7 +502,7 @@ combined_metrics%>%
   theme(plot.title = element_text(face="bold"))
 ```
 
-### Finalizing Our Model
+**Finalizing Our Model**
 
 We finalize our model by choosing the random forest model with the lowest RMSE. We then fit this finalized model on all of our training data as well as use this model to generate predictions on our testing data. This is the final step of our supervised machine learning development.
 
@@ -514,13 +523,15 @@ corn_predictions_testing<-bind_cols(corn_test,
                               new_data=corn_test))
 ```
 
-Once we run our model on our testing data, we generate metrics on how our model performed on this "new" data that it has not been tested on before. We see that our model generates an RMSE of .988. This value is not as low as we would have liked, as our maximum value for the log of quantity of corn harvested in the testing data is 7.69, with a mean of 5.9. 
+Once we run our model on our testing data, we generate metrics on how our model performed on this "new" data that it has not been tested on before. We see that our model generates an RMSE of .988. This value is not as low as we would have liked, as our maximum value for the log of quantity of corn harvested in the testing data is 7.69, with a mean of 5.9.
+
 ```{r}
 metrics(corn_predictions_testing, truth = log_quantityharvested, estimate = .pred)
 ```
 
-## Variable Importance
-Finally, based on our results, we visualize variable importance for the Random Forest model to see which variables in our data set play the most important role in predicting the outcome i.e. corn yield. 
+**Variable Importance**
+
+Finally, based on our results, we visualize variable importance for the Random Forest model to see which variables in our data set play the most important role in predicting the outcome i.e. corn yield.
 
 ```{r}
 corn_final_fit %>%
@@ -536,4 +547,9 @@ x = "Variables")+
 theme(plot.title = element_text(face="bold"))
 ```
 
-The plot shows that mean Drought Severity and Coverage Index for 2016 and 2017 were the most important predictors in our model which is understandable considering drought levels effect crop yields. These are followed by air quality variables that measure good Air Quality Index days, days with highest AQI and moderate air quality days. Ozone concentration days, 90th percentile AQI, median AQI are also important predictors in our model but they show a lower importance. Conceptually, it makes sense that drought levels and Air Quality Index are the most important variables in predicting corn yield, as these variables affect the crops most directly throughout their growth cycle. Other metrics that we use to predict corn yields which have lower levels of importance, like the number of days which are "Unhealthy" or "Hazardous" are relatively infrequent in our data, which also could explain their low explanatory power, as these variables have little variance for the model to exploit. Finally, worse air quality current is concentrated in more urban areas, and therefore may have a lesser effect on crop production at this point in time, although the increase of air pollution events, like forest fires or increasing urban sprawl, could increase the importance of these variables in the future. 
+The plot shows that mean Drought Severity and Coverage Index for 2016 and 2017 were the most important predictors in our model which is understandable considering drought levels effect crop yields. These are followed by air quality variables that measure good Air Quality Index days, days with highest AQI and moderate air quality days. Ozone concentration days, 90th percentile AQI, median AQI are also important predictors in our model but they show a lower importance. Conceptually, it makes sense that drought levels and Air Quality Index are the most important variables in predicting corn yield, as these variables affect the crops most directly throughout their growth cycle. Other metrics that we use to predict corn yields which have lower levels of importance, like the number of days which are "Unhealthy" or "Hazardous" are relatively infrequent in our data, which also could explain their low explanatory power, as these variables have little variance for the model to exploit. Finally, worse air quality current is concentrated in more urban areas, and therefore may have a lesser effect on crop production at this point in time, although the increase of air pollution events, like forest fires or increasing urban sprawl, could increase the importance of these variables in the future.
+
+## *Conclusion and Looking Forward*
+
+After data retrieval, cleaning, and merging, one of the more challenging aspects of this project was ultimately deciding which sorts of supervised machine learning models could work with the limited dataset we finalized. As demonstrated in the model section, we ultimately decided upon comparing a Lasso and a Random Forest model. After comparing the models on the basis of root mean square error, it was clear the random forest model better suited our data. However, it is also still clear that this random forest model is not perfect. As noted multiple times throughout this project, county-level data is quite hard to come by in the agricultural world. There are limited pools of data to use as predictors, and when measures exist, they are often not available for every county. When it came down to it, despite there being over 3,000 counties in the United States, we had a very short and a very narrow dataset of just over 600 observations. However, we made the most out of these limitations by using cross-validation to test different models and hyperparameter tuning. Although our models did not necessarily succeed in accuracy or precision, we still had an opportunity to see which variables were most useful in predicting corn production on the county level. It is exciting to know that even very limited data could potentially be used to predict crop production.
+We believe we could make this model even better if we had the time and the access to more data. We would like to include many more measures of climate and environmental health as well as technology usage, which definitely impact crop production. If these data were available to us publicly and on the county-level, we could have improved our predictive model simply through access to more predictors. We searched high and low for county-level public data on temperature, precipitation, weather events, soil health, soil pH, soil moisture, soil type, air humidity, fertilizer use, pesticide use, availability of genetically modified seeds, and many others. Despite these limitations in our own project, we believe that strengthening the model is possible. However, we do not believe that the average farm operator would have access to all this information. If she could use a model like ours to better predict her crop output, she may be able to adapt to other more useful technologies and farming techniques to make the most of her land, despite the negative impacts of climate change making the environment much more unpredictable.
