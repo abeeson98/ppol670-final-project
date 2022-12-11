@@ -1,6 +1,6 @@
 ---
 title: "Introduction to Data Science: Fall 2022 Final Project"
-subtitle: "Predicting crop yields using weather data, using supervised machine learning."
+subtitle: "Predicting crop yields in the United States with weather data, using supervised machine learning."
 author: Alexa Beeson, Mia Minkin, Hailey Wellenstein, and Zujaja Baig
 format: html
 editor: visual
@@ -22,6 +22,7 @@ XXXXX Introduction to project
 XXXXX Description of data
 
 # Pre-analysis data merging and cleaning
+
 Loading in packages
 
 ```{r}
@@ -41,8 +42,8 @@ library(patchwork)
 library(vip)
 ```
 
-
 #### Reading in data
+
 Yield data:
 
 ```{r}
@@ -236,7 +237,7 @@ drought_plot <- air_corn_drought_gps %>%
                     labels = c("No Drought", "Moderate Drought (D1)", "Severe Drought (D2)"))+
   theme_minimal() +
   labs(title = "What is the frequency of drought within our sample?",
-       subtitle = "Plot shows the average score of drought severity for counties within each state of our sample for the year 2017. Drought categories are derived from Drought Severity\n and Coverage Index (DSCI) by the University of Nebraska Lincoln. All counties to the right of the vertical reference line expereinced drought, on average, over the course of the year.",
+       subtitle = "Plot shows the average score of drought severity for counties within each state of our sample\n for the year 2017. Drought categories are derived from Drought Severity and Coverage Index\n(DSCI) by the University of Nebraska Lincoln. All counties to the right of the vertical reference\n line expereinced drought, on average, over the course of the year.",
        y = "Mean Drought Severity and Coverage Index",
        x = NULL, 
        caption = "Data Source: University of Nebraska-Lincoln, 2017") +
@@ -275,7 +276,7 @@ aqi_plot<-aq_plot %>%
   scale_fill_brewer(palette = "BrBG", direction=-1)+
   scale_x_continuous(limits = c(-1.5, 1.5))+
   labs(title = "Most states in our sample experience, on average, Good or Moderate air quality.",
-       subtitle = "Air quality categories are set by the Environemntal Protection Agency (EPA). Values shown are the proportion of days measured which fall into each category for the year 2017.",
+       subtitle = "Air quality categories are set by the Environemntal Protection Agency (EPA). Values shown are the proportion of days measured which fall into each\ncategory for the year 2017.",
     y = "Air Quality Categories",
        x = "Proportion of Measured Days", 
     caption = "Data Source: Environmental Protection Agency, 2017")+
@@ -306,7 +307,8 @@ state_corn_map<-
                        na.value="white",
                        name = "Bushels of corn",
                        label = scales::comma)+
-  labs(title="State Corn Harvest  in the United States (2017)", 
+  labs(title="Corn Harvest  in the United States", 
+       subtitle = "Corn harvest is measured in bushels, and is aggregated by county to the state level, for the year 2017.",
        caption = "Data Source: United States Department of Agriculture, 2017 Census")+
   theme(legend.position = "right",
         panel.background=element_rect(colour = "black", fill = "white"), 
@@ -334,7 +336,8 @@ state_drought_map<-
                        na.value="grey",
                        name = "Drought Index\nAnnual Average",
                        label = scales::comma)+
-  labs(title="State Drought Index Averages in the United States (2017)",
+  labs(title="Drought Index Averages in the United States",
+       subtitle = "Drought index values have been averaged over all measurements for 2017\nfor each county, and aggregated to the state level.",
        caption = "Data Source: University of Nebraska-Lincoln, 2017,")+
   theme(legend.position = "right",
         panel.background=element_rect(colour = "black", fill = "white"), 
@@ -364,9 +367,10 @@ state_aq_map<-
                        mid="#F7E594",
                        high="red",
                        na.value="white",
-                       name = "State AQ Averages",
+                       name = "Average Number of Days",
                        label = scales::comma)+
-  labs(title="States with Unhealthy AQ in the United States (2017)", 
+  labs(title="Average Number of Days per State with Unhealthy Air Quality", 
+       subtitle = "Unhealthy Air Quality is defined by the EPA as 'Everyone may begin to experience some adverse health\neffects, and members of the sensitive groups may experience more serious effects'. Map shows average\nnumber of days with unhealthy air quality across counties in each state.",
        caption = "Data Source: Environmental Protection Agency, 2017")+
   theme(legend.position = "right",
         panel.background=element_rect(colour = "black", fill = "white"), 
@@ -374,25 +378,26 @@ state_aq_map<-
 
 ```
 
-```{r}
+### Corn production:
+```{r, fig.width = 13, fig.height= 8}
 #| column: page
-
-state_corn_map 
-corn_plot
+state_corn_map + corn_plot
 ```
 
-```{r}
+### Drought Severity and Coverage:
+```{r, fig.width = 13, fig.height= 8}
 #| column: page
+state_drought_map + drought_plot
+```
 
-state_drought_map 
-drought_plot
-
+### Air quality:
+```{r}
 state_aq_map 
 ```
 
-```{r, fig.width = 12, fig.height= 6}
-#| column: page
 
+```{r, fig.width = 12, fig.height= 8}
+#| column: page
 aqi_plot 
 ```
 
@@ -509,11 +514,11 @@ corn_final_fit %>%
  extract_fit_parsnip() %>%
  vip(num_features = 10,
          aesthetics = list(fill = "cadetblue3", size = 2))+
-  labs(title = "Most important variables in our model",
-subtitle = "This plot shows the variables in our data based on their importance in predicting corn yield with our model.",
+  labs(title = "Most important variables in our model.",
+subtitle = "This plot shows the variables in our data based on their importance in predicting\ncorn yield with our model.",
 y = "Importance",
 x = "Variables")+
   scale_x_discrete(labels= c("meanDSCI2016"="Mean DSCI in 2016", "meanDSCI2017"="Mean DSCI in 2017"))+
-theme(plot.title = element_text(face="bold"))+
-  theme_minimal() 
+  theme_minimal()+
+theme(plot.title = element_text(face="bold"))
 ```
